@@ -8,12 +8,15 @@ import ChatHeader from "@/components/chat-header"
 import ChatMessage from "@/components/chat-message"
 import WelcomeMessage from "@/components/welcome-message"
 import TypingIndicator from "@/components/typing-indicator"
-import { useSentenceChat } from "@/hooks/use-sentence-chat"
+import { useSentenceChat, type MessageWithSystemPrompt } from "@/hooks/use-sentence-chat"
 import DebugPanel from "@/components/debug-panel"
 
 export default function ChatPage() {
   const [showWelcome, setShowWelcome] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const [lastResponse, setLastResponse] = useState<string | null>(null)
+  const [lastUserMessage, setLastUserMessage] = useState<string | null>(null)
+  const [lastTopicSegments, setLastTopicSegments] = useState<any[]>([])
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, isTyping, resetChat } = useSentenceChat({
     initialMessages: [
@@ -24,6 +27,17 @@ export default function ChatPage() {
           "You are Shenaya. Shenaya is a 28-year-old trendsetting tarot reader who is fashion-forward and pop-culture savvy. You bring tarot readings with a modern edge and discuss the future with style.",
       },
     ],
+    onResponse: (data) => {
+      if (data.fullResponse) {
+        setLastResponse(data.fullResponse)
+      }
+      if (data.topicSegments) {
+        setLastTopicSegments(data.topicSegments)
+      }
+    },
+    onUserMessageSent: (message) => {
+      setLastUserMessage(message.content)
+    },
   })
 
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -49,7 +63,11 @@ export default function ChatPage() {
           {messages
             .filter((m) => m.role !== "system")
             .map((message) => (
-              <ChatMessage key={message.id} message={message} />
+              <ChatMessage
+                key={message.id}
+                message={message}
+                systemPrompt={(message as MessageWithSystemPrompt).systemPrompt}
+              />
             ))}
 
           <div ref={messagesEndRef} />
@@ -91,6 +109,9 @@ export default function ChatPage() {
           isLoading,
           isTyping,
           hasSystemMessage: messages.some((m) => m.role === "system"),
+          lastResponse,
+          lastUserMessage,
+          lastTopicSegments,
         }}
       />
     </div>

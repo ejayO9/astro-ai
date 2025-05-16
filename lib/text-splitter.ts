@@ -3,7 +3,29 @@ export function splitIntoSentences(text: string): string[] {
   const sentences = text.split(/(?<=[.!?])\s+/)
 
   // Filter out empty sentences and trim each one
-  return sentences.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0)
+  const trimmedSentences = sentences.map((sentence) => sentence.trim()).filter((sentence) => sentence.length > 0)
+
+  // If we have at least two sentences, check if the last one is just an emoji or ends with an emoji
+  if (trimmedSentences.length >= 2) {
+    const lastSentence = trimmedSentences[trimmedSentences.length - 1]
+
+    // Simple emoji regex
+    const emojiRegex = /[\p{Emoji}]+$/u
+
+    // Check if the last sentence is just an emoji or ends with an emoji
+    if (emojiRegex.test(lastSentence)) {
+      // Remove the last sentence
+      const lastItem = trimmedSentences.pop()
+
+      // If the last sentence is just an emoji or ends with an emoji, combine it with the previous sentence
+      if (lastItem) {
+        const secondLastIndex = trimmedSentences.length - 1
+        trimmedSentences[secondLastIndex] = trimmedSentences[secondLastIndex] + " " + lastItem
+      }
+    }
+  }
+
+  return trimmedSentences
 }
 
 export function limitEmojis(text: string, limit = 1): string {

@@ -4,22 +4,32 @@ import type React from "react"
 
 import { useState, useCallback, useEffect } from "react"
 import type { Message } from "ai"
+import type { TopicSegment } from "@/lib/topic-analyzer"
 
 interface UseSentenceChatOptions {
   initialMessages?: Message[]
   onFinish?: (message: Message) => void
+  onResponse?: (data: any) => void
+  onUserMessageSent?: (message: Message) => void
+}
+
+// Extended message type to include system prompt and topic
+export interface MessageWithSystemPrompt extends Message {
+  systemPrompt?: string
+  topic?: string
 }
 
 export function useSentenceChat(options: UseSentenceChatOptions = {}) {
-  const [messages, setMessages] = useState<Message[]>(options.initialMessages || [])
+  const [messages, setMessages] = useState<MessageWithSystemPrompt[]>(options.initialMessages || [])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
-  const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0)
-  const [sentences, setSentences] = useState<string[]>([])
+  const [currentTopicIndex, setCurrentTopicIndex] = useState(0)
+  const [topicSegments, setTopicSegments] = useState<TopicSegment[]>([])
+  const [currentSystemPrompt, setCurrentSystemPrompt] = useState<string | undefined>(undefined)
 
   // Function to add a new message
-  const addMessage = useCallback((message: Message) => {
+  const addMessage = useCallback((message: MessageWithSystemPrompt) => {
     setMessages((prev) => [...prev, message])
   }, [])
 
@@ -31,13 +41,19 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
       if (!input.trim()) return
 
       // Add user message
-      const userMessage: Message = {
+      const userMessage: MessageWithSystemPrompt = {
         id: Date.now().toString(),
         role: "user",
         content: input,
       }
 
       addMessage(userMessage)
+
+      // Call onUserMessageSent callback if provided
+      if (options.onUserMessageSent) {
+        options.onUserMessageSent(userMessage)
+      }
+
       setInput("")
       setIsLoading(true)
 
@@ -60,19 +76,28 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
         const data = await response.json()
         console.log("API response:", data)
 
-        if (data.sentences && Array.isArray(data.sentences)) {
-          // Set sentences for streaming
-          setSentences(data.sentences)
-          setCurrentSentenceIndex(0)
+        // Store the system prompt used for this response
+        setCurrentSystemPrompt(data.systemPrompt)
 
-          // Start typing animation for first sentence
+        // Call onResponse callback if provided
+        if (options.onResponse) {
+          options.onResponse(data)
+        }
+
+        if (data.topicSegments && Array.isArray(data.topicSegments)) {
+          // Set topic segments for streaming
+          setTopicSegments(data.topicSegments)
+          setCurrentTopicIndex(0)
+
+          // Start typing animation for first topic
           setIsTyping(true)
         } else {
-          // Fallback if no sentences
+          // Fallback if no topic segments
           addMessage({
             id: Date.now().toString(),
             role: "assistant",
             content: data.fullResponse || "I'm not sure how to respond to that.",
+            systemPrompt: data.systemPrompt,
           })
         }
       } catch (error) {
@@ -87,37 +112,42 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
         setIsLoading(false)
       }
     },
-    [input, messages, addMessage],
+    [input, messages, addMessage, options],
   )
 
-  // Effect to handle sentence-by-sentence streaming with typing indicators
+  // Effect to handle topic-by-topic streaming with typing indicators
   useEffect(() => {
-    if (sentences.length === 0 || currentSentenceIndex >= sentences.length) return
+    if (topicSegments.length === 0 || currentTopicIndex >= topicSegments.length) return
 
     // Show typing indicator
     if (isTyping) {
       const typingTimeout = setTimeout(
         () => {
-          // Add the current sentence as a message
+          const currentSegment = topicSegments[currentTopicIndex]
+
+          // Add the current topic segment as a message
           addMessage({
-            id: `assistant-${Date.now()}-${currentSentenceIndex}`,
+            id: `assistant-${Date.now()}-${currentTopicIndex}`,
             role: "assistant",
-            content: sentences[currentSentenceIndex],
+            content: currentSegment.content,
+            systemPrompt: currentSystemPrompt,
+            topic: currentSegment.topic,
           })
 
-          // Move to next sentence
-          setCurrentSentenceIndex((prev) => prev + 1)
+          // Move to next topic
+          setCurrentTopicIndex((prev) => prev + 1)
 
-          // If there are more sentences, show typing again after a pause
-          if (currentSentenceIndex < sentences.length - 1) {
+          // If there are more topics, show typing again after a pause
+          if (currentTopicIndex < topicSegments.length - 1) {
             setTimeout(() => setIsTyping(true), 500)
           } else {
-            // We're done with all sentences
+            // We're done with all topics
             if (options.onFinish) {
               options.onFinish({
                 id: `assistant-${Date.now()}-complete`,
                 role: "assistant",
-                content: sentences.join(" "),
+                content: topicSegments.map((segment) => segment.content).join(" "),
+                systemPrompt: currentSystemPrompt,
               })
             }
           }
@@ -129,7 +159,7 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
 
       return () => clearTimeout(typingTimeout)
     }
-  }, [sentences, currentSentenceIndex, isTyping, addMessage, options])
+  }, [topicSegments, currentTopicIndex, isTyping, addMessage, options, currentSystemPrompt])
 
   // Function to reset chat
   const resetChat = useCallback(async () => {
@@ -154,9 +184,10 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
       ],
     )
 
-    setSentences([])
-    setCurrentSentenceIndex(0)
+    setTopicSegments([])
+    setCurrentTopicIndex(0)
     setIsTyping(false)
+    setCurrentSystemPrompt(undefined)
   }, [options.initialMessages])
 
   return {

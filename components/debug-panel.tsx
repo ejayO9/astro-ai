@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { isGreetingOrNonQuestion } from "@/lib/message-analyzer"
 
 interface DebugPanelProps {
   data: any
@@ -9,6 +10,17 @@ interface DebugPanelProps {
 
 export default function DebugPanel({ data }: DebugPanelProps) {
   const [isOpen, setIsOpen] = useState(false)
+
+  // Add message analysis to debug data
+  const enhancedData = {
+    ...data,
+    lastUserMessageAnalysis: data.lastUserMessage
+      ? {
+          isGreetingOrNonQuestion: isGreetingOrNonQuestion(data.lastUserMessage),
+          message: data.lastUserMessage,
+        }
+      : null,
+  }
 
   if (!isOpen) {
     return (
@@ -26,7 +38,7 @@ export default function DebugPanel({ data }: DebugPanelProps) {
           Close
         </Button>
       </div>
-      <pre className="text-xs">{JSON.stringify(data, null, 2)}</pre>
+      <pre className="text-xs">{JSON.stringify(enhancedData, null, 2)}</pre>
     </div>
   )
 }
