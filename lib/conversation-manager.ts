@@ -49,7 +49,7 @@ export class ConversationManager {
 
     // Generate summary using OpenAI
     const { text: summary } = await generateText({
-      model: openai("gpt-4o"),
+      model: openai("gpt-4.1"),
       prompt: `Summarize the following conversation between a user and Shenaya (a tarot reader). Focus on key insights, questions asked, and readings given:\n\n${conversationText}`,
       temperature: 0.7,
       maxTokens: 250,

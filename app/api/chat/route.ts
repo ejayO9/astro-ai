@@ -74,7 +74,7 @@ export async function POST(req: Request) {
 
       // Generate response using OpenAI for questions or other messages
       const { text: fullResponse } = await generateText({
-        model: openai("gpt-4o"),
+        model: openai("gpt-4.1"),
         messages: messageStore,
       })
 
