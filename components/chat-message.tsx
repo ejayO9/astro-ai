@@ -1,16 +1,25 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import type { Message } from "ai"
 import { cn } from "@/lib/utils"
 import { ChevronDown, ChevronUp } from "lucide-react"
+import ResponseStepsDropdown from "./response-steps-dropdown"
+import LogsDropdown from "./logs-dropdown"
+import type { LogEntry } from "@/lib/logging-service"
 
 interface ChatMessageProps {
-  message: Message & { topic?: string }
+  message: Message & {
+    topic?: string
+    systemPrompt?: string
+    logs?: LogEntry[]
+  }
   systemPrompt?: string
+  characterAvatar?: string
 }
 
-export default function ChatMessage({ message, systemPrompt }: ChatMessageProps) {
+export default function ChatMessage({ message, systemPrompt, characterAvatar }: ChatMessageProps) {
   const [showSystemPrompt, setShowSystemPrompt] = useState(false)
   const isUser = message.role === "user"
 
@@ -27,8 +36,14 @@ export default function ChatMessage({ message, systemPrompt }: ChatMessageProps)
 
       <div className={cn("flex items-start gap-3", isUser ? "justify-end" : "justify-start")}>
         {!isUser && (
-          <div className="h-8 w-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-purple-600 text-sm">S</span>
+          <div className="relative h-8 w-8 rounded-full overflow-hidden flex-shrink-0">
+            {characterAvatar ? (
+              <Image src={characterAvatar || "/placeholder.svg"} alt="Character avatar" fill className="object-cover" />
+            ) : (
+              <div className="h-full w-full bg-purple-100 flex items-center justify-center">
+                <span className="text-purple-600 text-sm">A</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -74,6 +89,12 @@ export default function ChatMessage({ message, systemPrompt }: ChatMessageProps)
           )}
         </div>
       )}
+
+      {/* Response steps dropdown (only for assistant messages) */}
+      {!isUser && <ResponseStepsDropdown />}
+
+      {/* Logs dropdown (only for assistant messages) */}
+      {!isUser && message.logs && message.logs.length > 0 && <LogsDropdown logs={message.logs} />}
     </div>
   )
 }
