@@ -1,6 +1,6 @@
 import type { BirthDetails, AstrologyChart } from "@/types/astrology"
 import { generatePlanetaryPositionReport } from "./planetary-analyzer"
-import { analyzeUserIntent } from "./intent-analyzer" // Fixed import name
+import { analyzeLLMIntent } from "./llm-intent-extractor"
 import { getHouseCharacteristics } from "./house-characteristics"
 import { logInfo, logError, logDebug } from "@/lib/logging-service"
 
@@ -11,10 +11,7 @@ export async function generateEnhancedGurujiPrompt(
   birthDetails: BirthDetails,
   chartData: AstrologyChart,
   query?: string,
-): Promise<{
-  prompt: string
-  intentAnalysis: any
-}> {
+): Promise<string> {
   logInfo("enhanced-prompt-generator", "Generating enhanced Guruji prompt with LLM intent analysis", {
     hasQuery: !!query,
     birthDetailsProvided: !!birthDetails,
@@ -33,23 +30,22 @@ export async function generateEnhancedGurujiPrompt(
     query: query?.substring(0, 50),
   })
 
-  let intentAnalysis = null
-
   try {
     // Generate comprehensive planetary analysis
     const planetaryReport = generatePlanetaryPositionReport(chartData)
 
     // Analyze user intent with LLM if query is provided
+    let intentAnalysis = null
     if (query) {
       try {
-        intentAnalysis = await analyzeUserIntent(query) // Fixed function name
-        logDebug("enhanced-prompt-generator", "Intent analysis completed", {
-          primaryIntent: intentAnalysis.primaryIntent,
-          primaryHouses: intentAnalysis.primaryHouses,
+        intentAnalysis = await analyzeLLMIntent(query)
+        logDebug("enhanced-prompt-generator", "LLM intent analysis completed", {
+          primaryIntent: intentAnalysis.intent.primaryIntent,
+          primaryHouses: intentAnalysis.houseMapping.primaryHouses,
           confidence: intentAnalysis.confidence,
         })
       } catch (intentError) {
-        logError("enhanced-prompt-generator", "Intent analysis failed, continuing without it", intentError)
+        logError("enhanced-prompt-generator", "LLM intent analysis failed, continuing without it", intentError)
         intentAnalysis = null
       }
     }
@@ -107,38 +103,45 @@ export async function generateEnhancedGurujiPrompt(
       ? `The person is asking about: ${query}`
       : "The person is seeking general astrological guidance"
 
-    // Format intent analysis section if available
+    // Format LLM intent analysis section if available
     let intentAnalysisSection = ""
     if (intentAnalysis) {
       // Get house characteristics for relevant houses
-      const relevantHouses = [...intentAnalysis.primaryHouses, ...intentAnalysis.secondaryHouses]
+      const relevantHouses = [
+        ...intentAnalysis.houseMapping.primaryHouses,
+        ...intentAnalysis.houseMapping.secondaryHouses,
+      ]
       const houseCharacteristics = getHouseCharacteristics(relevantHouses)
 
       intentAnalysisSection = `
 
-INTENT ANALYSIS:
-Primary Intent: ${intentAnalysis.primaryIntent}
-Secondary Intents: ${intentAnalysis.secondaryIntents.join(", ")}
-Primary Houses to Focus: ${intentAnalysis.primaryHouses.join(", ")}
-${intentAnalysis.secondaryHouses.length > 0 ? `Secondary Houses: ${intentAnalysis.secondaryHouses.join(", ")}` : ""}
+LLM INTENT ANALYSIS:
+Primary Intent: ${intentAnalysis.intent.primaryIntent}
+Secondary Intents: ${intentAnalysis.intent.secondaryIntents.join(", ")}
+Life Areas: ${intentAnalysis.intent.lifeAreas.join(", ")}
+Specific Concerns: ${intentAnalysis.intent.specificConcerns.join(", ")}
+Emotional Tone: ${intentAnalysis.intent.emotionalTone}
 Confidence Level: ${Math.round(intentAnalysis.confidence * 100)}%
-Is Asking for Remedies: ${intentAnalysis.isAskingForRemedies ? "Yes" : "No"}
-Specific Concerns: ${intentAnalysis.specificConcerns.join(", ")}
+
+HOUSE MAPPING FROM LLM:
+Primary Houses to Focus: ${intentAnalysis.houseMapping.primaryHouses.join(", ")}
+${intentAnalysis.houseMapping.secondaryHouses.length > 0 ? `Secondary Houses: ${intentAnalysis.houseMapping.secondaryHouses.join(", ")}` : ""}
 
 HOUSE-SPECIFIC ANALYSIS FOR THIS QUERY:
 ${houseCharacteristics
   .map(
     (house) => `House ${house.number} (${house.name}):
-  - Key significations to focus: ${getRelevantSignifications(house, intentAnalysis.specificConcerns).join(", ")}
+  - Reason for relevance: ${intentAnalysis.houseMapping.houseReasons[house.number.toString()] || "Supporting analysis"}
+  - Key significations to focus: ${getRelevantSignifications(house, intentAnalysis.intent.lifeAreas).join(", ")}
   - Body parts: ${house.body.join(", ")}`,
   )
   .join("\n\n")}
 
-ANALYSIS APPROACH:
-${intentAnalysis.recommendations.analysisApproach}
+ANALYSIS APPROACH FROM LLM:
+${intentAnalysis.houseMapping.analysisApproach}
 
-INTENT SUMMARY:
-${intentAnalysis.summary}
+LLM INTENT SUMMARY:
+${intentAnalysis.intent.primaryIntent} - Focus on houses ${intentAnalysis.houseMapping.primaryHouses.join(", ")} with ${Math.round(intentAnalysis.confidence * 100)}% confidence.
 `
     }
 
@@ -149,7 +152,7 @@ ${intentAnalysis.summary}
 
     // Generate the complete enhanced prompt
     const prompt = `
-You are Guruji, a 53-year-old Sanskrit scholar and Vedic astrologer from Varanasi. You are analyzing a birth chart with comprehensive planetary position analysis and advanced intent mapping.
+You are Guruji, a 53-year-old Sanskrit scholar and Vedic astrologer from Varanasi. You are analyzing a birth chart with comprehensive planetary position analysis and advanced LLM intent mapping.
 
 BIRTH INFORMATION:
 Name: ${birthDetails.name || "The native"}
@@ -181,20 +184,22 @@ ANALYSIS GUIDELINES:
 ${
   intentAnalysis
     ? `
-SPECIFIC GUIDANCE FOR THIS QUERY:
-The analysis has determined this query relates to: ${intentAnalysis.primaryIntent} with ${Math.round(intentAnalysis.confidence * 100)}% confidence.
+SPECIFIC GUIDANCE FOR THIS QUERY (FROM LLM ANALYSIS):
+The LLM has analyzed this query and determined it relates to: ${intentAnalysis.intent.lifeAreas.join(", ")} with ${Math.round(intentAnalysis.confidence * 100)}% confidence.
 
-PRIMARY FOCUS: Examine houses ${intentAnalysis.primaryHouses.join(", ")} in detail, as these are most relevant to the person's question.
-${intentAnalysis.secondaryHouses.length > 0 ? `SECONDARY FOCUS: Also consider houses ${intentAnalysis.secondaryHouses.join(", ")} for additional insights.` : ""}
+PRIMARY FOCUS: Examine houses ${intentAnalysis.houseMapping.primaryHouses.join(", ")} in detail, as these are most relevant to the person's question.
+${intentAnalysis.houseMapping.secondaryHouses.length > 0 ? `SECONDARY FOCUS: Also consider houses ${intentAnalysis.houseMapping.secondaryHouses.join(", ")} for additional insights.` : ""}
 
 SPECIFIC CONCERNS TO ADDRESS:
-${intentAnalysis.specificConcerns.map((concern) => `- ${concern}`).join("\n")}
+${intentAnalysis.intent.specificConcerns.map((concern) => `- ${concern}`).join("\n")}
 
-ANALYSIS APPROACH: ${intentAnalysis.recommendations.analysisApproach}
+EMOTIONAL TONE: The person's emotional tone is ${intentAnalysis.intent.emotionalTone}. Respond with appropriate sensitivity.
+
+ANALYSIS APPROACH: ${intentAnalysis.houseMapping.analysisApproach}
 `
     : `
 GENERAL GUIDANCE:
-Provide a comprehensive analysis covering all major life areas as no specific intent was detected.
+Provide a comprehensive analysis covering all major life areas as no specific intent was detected through LLM analysis.
 `
 }
 
@@ -204,14 +209,14 @@ Based on the detailed planetary position analysis above, you have comprehensive 
 3. House significations and how planets influence them
 4. Sign characteristics and their impact on planetary expression
 5. Specific effects and potential remedies for each planetary position
-${intentAnalysis ? `6. Specific life areas the person is asking about based on intent analysis` : ""}
+${intentAnalysis ? `6. Specific life areas the person is asking about based on advanced LLM intent analysis` : ""}
 
 Use this detailed analysis to provide deep, accurate insights. Reference specific planetary dignities, house placements, and their combined effects. When a planet is strong (exalted, own sign, or high strength), emphasize the positive results it will give. When a planet is weak or debilitated, explain how this creates opportunities for growth and what areas need attention.
 
 ${
   intentAnalysis
     ? `
-IMPORTANT: Focus your response primarily on the houses and life areas identified through intent analysis above. The person is specifically asking about ${intentAnalysis.primaryIntent}, so tailor your interpretation accordingly.
+IMPORTANT: Focus your response primarily on the houses and life areas identified through LLM analysis above. The person is specifically asking about ${intentAnalysis.intent.lifeAreas.join(" and ")}, so tailor your interpretation accordingly.
 `
     : ""
 }
@@ -224,14 +229,11 @@ Remember to speak in Guruji's voice - wise and compassionate, and with occasiona
     logInfo("enhanced-prompt-generator", "Enhanced prompt generated successfully", {
       promptLength: prompt.length,
       includesRemedies: isAskingForRemedies,
-      hasIntentAnalysis: !!intentAnalysis,
-      primaryHouses: intentAnalysis?.primaryHouses || [],
+      hasLLMIntentAnalysis: !!intentAnalysis,
+      primaryHouses: intentAnalysis?.houseMapping.primaryHouses || [],
     })
 
-    return {
-      prompt,
-      intentAnalysis,
-    }
+    return prompt
   } catch (error) {
     logError("enhanced-prompt-generator", "Error generating enhanced prompt", error)
     // Return a simplified prompt that will still work
@@ -239,8 +241,7 @@ Remember to speak in Guruji's voice - wise and compassionate, and with occasiona
       ? "Since the person is specifically asking about remedies, provide traditional remedies such as mantras, gemstones, or spiritual practices."
       : "Do NOT provide remedies unless specifically asked. Focus on interpretation and analysis only."
 
-    return {
-      prompt: `
+    return `
 You are Guruji, a 53-year-old Sanskrit scholar and Vedic astrologer from Varanasi. 
 
 The person has provided their birth details: ${birthDetails.name || "The native"} born on ${birthDetails.date} at ${birthDetails.time} in ${birthDetails.city}, ${birthDetails.country}.
@@ -253,17 +254,15 @@ ${remediesInstruction}
 As Guruji, provide a Vedic astrological interpretation. Incorporate Sanskrit terms where appropriate, and reference ancient texts when relevant. Your analysis should be insightful, respectful, and spiritually oriented.
 
 Remember to speak in Guruji's voice - wise and compassionate, and with occasional references to ancient wisdom.
-`,
-      intentAnalysis: null,
-    }
+`
   }
 }
 
 /**
- * Gets relevant significations for a house based on specific concerns
+ * Gets relevant significations for a house based on life areas
  */
-function getRelevantSignifications(house: any, specificConcerns: string[]): string[] {
-  const concerns = specificConcerns.map((concern) => concern.toLowerCase())
+function getRelevantSignifications(house: any, lifeAreas: string[]): string[] {
+  const areas = lifeAreas.map((area) => area.toLowerCase())
 
   const allSignifications = [
     ...house.material,
@@ -275,9 +274,9 @@ function getRelevantSignifications(house: any, specificConcerns: string[]): stri
     ...house.lifeEvents,
   ]
 
-  // Filter significations that match specific concerns
+  // Filter significations that match life areas
   const relevant = allSignifications.filter((sig) =>
-    concerns.some((concern) => sig.toLowerCase().includes(concern) || concern.includes(sig.toLowerCase())),
+    areas.some((area) => sig.toLowerCase().includes(area) || area.includes(sig.toLowerCase())),
   )
 
   // Return top 5 relevant or first 5 if none match

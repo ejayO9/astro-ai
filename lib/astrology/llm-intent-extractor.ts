@@ -29,32 +29,22 @@ const IntentAnalysisSchema = z.object({
 type IntentAnalysisResult = z.infer<typeof IntentAnalysisSchema>
 
 /**
- * Get OpenAI API key from environment variables (SERVER SIDE ONLY)
- * SECURITY: Only uses server-side environment variables
+ * Get OpenAI API key from environment variables
  */
 function getOpenAIApiKey(): string | null {
-  // ONLY use server-side environment variables - NO client-side variables
-  return process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || null
+  return process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_KEY || null
 }
 
 /**
  * Analyzes user intent using LLM and maps to astrological houses
- * SECURITY: THIS FUNCTION MUST ONLY RUN ON SERVER SIDE
  */
 export async function analyzeLLMIntent(userQuery: string): Promise<IntentAnalysisResult> {
-  // Check if we're running on the server side
-  if (typeof window !== "undefined") {
-    logError("llm-intent-extractor", "analyzeLLMIntent called on client side - security violation")
-    return getFallbackAnalysis(userQuery)
-  }
-
   const apiKey = getOpenAIApiKey()
 
   logInfo("llm-intent-extractor", "Starting LLM intent analysis", {
     queryLength: userQuery.length,
     query: userQuery.substring(0, 100),
     hasApiKey: !!apiKey,
-    isServerSide: typeof window === "undefined",
   })
 
   // If no API key or query is too short, use fallback immediately
@@ -137,7 +127,6 @@ House 12: Losses, spirituality, foreign lands`,
 
 /**
  * Enhanced fallback analysis when LLM is not available
- * This function is safe to run on both client and server
  */
 function getFallbackAnalysis(userQuery: string): IntentAnalysisResult {
   const query = userQuery.toLowerCase().trim()
@@ -267,17 +256,23 @@ function getFallbackAnalysis(userQuery: string): IntentAnalysisResult {
 }
 
 /**
- * Client-safe intent analysis that only uses pattern matching
- * This function can be called from client-side code safely
+ * Generates a comprehensive prompt with house characteristics
  */
-export function analyzeIntentClientSafe(userQuery: string): IntentAnalysisResult {
-  logInfo("llm-intent-extractor", "Using client-safe intent analysis")
-  return getFallbackAnalysis(userQuery)
+function generateHouseCharacteristicsPrompt(): string {
+  let prompt = ""
+
+  for (let i = 1; i <= 12; i++) {
+    const house = HOUSE_CHARACTERISTICS[i]
+    if (house) {
+      prompt += `House ${i} - ${house.name}: ${house.significations?.slice(0, 3).join(", ") || "General significations"}\n`
+    }
+  }
+
+  return prompt
 }
 
 /**
  * Quick intent analysis for simple use cases
- * SECURITY: Only runs on server side
  */
 export async function quickIntentAnalysis(userQuery: string): Promise<{
   primaryHouses: number[]

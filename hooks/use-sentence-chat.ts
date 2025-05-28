@@ -25,7 +25,6 @@ export interface MessageWithSystemPrompt extends Message {
   topic?: string
   characterId?: string
   logs?: LogEntry[] // Add logs to the message
-  intentAnalysis?: any
 }
 
 export function useSentenceChat(options: UseSentenceChatOptions = {}) {
@@ -250,7 +249,6 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
             systemPrompt: data.systemPrompt || options.customSystemPrompt,
             characterId: selectedCharacter.id,
             logs: data.logs,
-            intentAnalysis: data.intentAnalysis || undefined,
           })
         }
       } catch (error) {
@@ -295,7 +293,6 @@ export function useSentenceChat(options: UseSentenceChatOptions = {}) {
             topic: currentSegment.topic,
             characterId: selectedCharacter.id,
             logs: currentLogs, // Add logs to the message
-            intentAnalysis: undefined, // Declare data variable before using it
           })
 
           // Move to next topic
