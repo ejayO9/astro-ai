@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Trash2 } from "lucide-react"
 import type { BirthDetails } from "@/types/astrology"
-import { calculateVedicChart } from "@/lib/astrology/calculator"
 import { getCityCoordinates } from "@/lib/astrology/geocoding"
 import { saveBirthDetails, getBirthDetails, clearBirthDetails } from "@/lib/astrology/storage"
+import { calculateEnhancedVedicChart } from "@/lib/astrology/enhanced-calculator"
 
 interface BirthDetailsFormProps {
   onSubmit: (birthDetails: BirthDetails, chartData: any) => void
@@ -99,7 +99,7 @@ export default function BirthDetailsForm({ onSubmit, onCancel }: BirthDetailsFor
       setHasStoredData(true)
 
       // Calculate the chart
-      const chartData = await calculateVedicChart(updatedBirthDetails)
+      const chartData = await calculateEnhancedVedicChart(updatedBirthDetails)
       onSubmit(updatedBirthDetails, chartData)
     } catch (error) {
       console.error("Error calculating chart:", error)

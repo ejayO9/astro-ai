@@ -1,196 +1,219 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { AstrologyChart } from "@/types/astrology"
-import { findActiveDashaPeriodsAtDate } from "@/lib/astrology/dasha-calculator"
+import { Badge } from "@/components/ui/badge"
+import { Calendar, MapPin, Clock, Star, Home } from "lucide-react"
+import type { BirthDetails, AstrologyChart } from "@/types/astrology"
+import PlanetaryPositionViewer from "./planetary-position-viewer"
+import { IntentAnalysisViewer } from "./intent-analysis-viewer"
+import { analyzeUserIntent } from "@/lib/astrology/intent-analyzer"
 
 interface AstrologySummaryProps {
+  birthDetails: BirthDetails
   chartData: AstrologyChart
+  userQuery?: string
 }
 
-export default function AstrologySummary({ chartData }: AstrologySummaryProps) {
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("en-US", {
+export function AstrologySummary({ birthDetails, chartData, userQuery }: AstrologySummaryProps) {
+  const [activeTab, setActiveTab] = useState("overview")
+
+  // Generate intent analysis if user query is provided
+  const intentAnalysis = userQuery ? analyzeUserIntent(userQuery) : null
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
     })
   }
 
-  // Find currently active dasha periods
-  const activeDashaPeriods = chartData.hierarchicalDashas
-    ? findActiveDashaPeriodsAtDate(chartData.hierarchicalDashas, new Date())
-    : []
+  const formatTime = (timeString: string) => {
+    const [hours, minutes] = timeString.split(":")
+    const hour = Number.parseInt(hours)
+    const ampm = hour >= 12 ? "PM" : "AM"
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
+  }
 
   return (
-    <Tabs defaultValue="summary" className="w-full">
-      <TabsList className="grid grid-cols-3 mb-4">
-        <TabsTrigger value="summary">Summary</TabsTrigger>
-        <TabsTrigger value="planets">Planets</TabsTrigger>
-        <TabsTrigger value="dashas">Dashas</TabsTrigger>
-      </TabsList>
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Star className="h-5 w-5" />
+          Astrological Analysis
+        </CardTitle>
+        <CardDescription>Comprehensive birth chart analysis for {birthDetails.name || "the native"}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="positions">Positions</TabsTrigger>
+            <TabsTrigger value="houses">Houses</TabsTrigger>
+            {intentAnalysis && <TabsTrigger value="intent">Intent</TabsTrigger>}
+          </TabsList>
 
-      <TabsContent value="summary">
-        <Card className="w-full">
-          <CardHeader>
-            <CardTitle>Astrological Summary</CardTitle>
-            <CardDescription>
-              Birth details for {chartData.native.name || "the native"} on{" "}
-              {new Date(chartData.native.birthDate).toLocaleDateString()}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <h3 className="text-sm font-medium mb-2">Birth Information</h3>
-              <div className="bg-slate-50 p-3 rounded-md">
-                <p>
-                  <span className="font-medium">Date & Time:</span>{" "}
-                  {new Date(chartData.native.birthDate).toLocaleString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "numeric",
-                    hour12: true,
-                  })}
-                </p>
-                <p>
-                  <span className="font-medium">Location:</span> {chartData.native.location.city},{" "}
-                  {chartData.native.location.country}
-                </p>
-              </div>
-            </div>
+          <TabsContent value="overview" className="space-y-6">
+            {/* Birth Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Birth Information</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">
+                      <strong>Date:</strong> {formatDate(birthDetails.date)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">
+                      <strong>Time:</strong> {formatTime(birthDetails.time)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">
+                      <strong>Place:</strong> {birthDetails.city}, {birthDetails.country}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">
+                      <strong>Coordinates:</strong> {birthDetails.latitude.toFixed(2)}°N,{" "}
+                      {birthDetails.longitude.toFixed(2)}°E
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div>
-              <h3 className="text-sm font-medium mb-2">Ascendant</h3>
-              <div className="bg-slate-50 p-3 rounded-md">
-                <p>
-                  <span className="font-semibold">{chartData.ascendant.sign}</span> at{" "}
-                  {chartData.ascendant.longitude.toFixed(2)}° in{" "}
-                  <span className="italic">{chartData.ascendant.nakshatra}</span> Nakshatra, Pada{" "}
-                  {chartData.ascendant.nakshatraPada}
-                </p>
-              </div>
-            </div>
+            {/* Ascendant Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Ascendant (Lagna)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="default">{chartData.ascendant.sign}</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      at {chartData.ascendant.longitude.toFixed(2)}°
+                    </span>
+                  </div>
+                  <div className="text-sm">
+                    <strong>Nakshatra:</strong> {chartData.ascendant.nakshatra}, Pada{" "}
+                    {chartData.ascendant.nakshatraPada}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div>
-              <h3 className="text-sm font-medium mb-2">Current Dasha</h3>
-              {activeDashaPeriods.length > 0 ? (
-                <div className="bg-slate-50 p-3 rounded-md">
+            {/* Current Dasha */}
+            {chartData.dashas && chartData.dashas.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Current Dasha</CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="space-y-2">
-                    {activeDashaPeriods.map((period, index) => (
-                      <div key={index} className={index > 0 ? "ml-4" : ""}>
-                        <p>
-                          <span className="font-semibold">{period.planet}</span>{" "}
-                          <Badge variant="outline" className="ml-1">
-                            {period.level}
-                          </Badge>
-                        </p>
-                        <p className="text-sm">
-                          From {formatDate(period.from)} to {formatDate(period.to)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : chartData.dashas.length > 0 ? (
-                <div className="bg-slate-50 p-3 rounded-md">
-                  <p>
-                    <span className="font-semibold">{chartData.dashas[0].planet}</span> Mahadasha
-                  </p>
-                  <p className="text-sm">
-                    From {formatDate(new Date(chartData.dashas[0].from))} to{" "}
-                    {formatDate(new Date(chartData.dashas[0].to))}
-                  </p>
-                  {chartData.dashas[0].balanceAtBirth && (
-                    <p className="text-xs text-slate-500">Balance at birth: {chartData.dashas[0].balanceAtBirth}</p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">Dasha information not available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="planets">
-        <Card>
-          <CardHeader>
-            <CardTitle>Planetary Positions</CardTitle>
-            <CardDescription>Positions of planets in your birth chart</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {chartData.planets.map((planet) => (
-                <div key={planet.name} className="bg-slate-50 p-2 rounded-md">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold">{planet.name}</span>
-                    <Badge variant={planet.isRetrograde ? "destructive" : "outline"}>
-                      {planet.isRetrograde ? "R" : "D"}
-                    </Badge>
-                  </div>
-                  <p className="text-sm">
-                    {planet.sign} at {planet.longitude.toFixed(2)}°
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {planet.nakshatra} Nakshatra, Pada {planet.nakshatraPada}, House {planet.house}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-
-      <TabsContent value="dashas">
-        <Card>
-          <CardHeader>
-            <CardTitle>Dasha Timeline</CardTitle>
-            <CardDescription>Planetary periods and sub-periods</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {chartData.hierarchicalDashas && chartData.hierarchicalDashas.length > 0 ? (
-              <div className="space-y-4">
-                {chartData.hierarchicalDashas.map((mahadasha, index) => (
-                  <div key={index} className="border rounded-md p-3">
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-medium">{mahadasha.planet} Mahadasha</h3>
-                      <Badge>
-                        {formatDate(mahadasha.from)} - {formatDate(mahadasha.to)}
-                      </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">{chartData.dashas[0].planet} Mahadasha</Badge>
                     </div>
-
-                    {mahadasha.children && mahadasha.children.length > 0 && (
-                      <div className="ml-4 mt-2 space-y-2">
-                        {mahadasha.children.slice(0, 3).map((antardasha, idx) => (
-                          <div key={idx} className="border-l-2 pl-3 py-1 border-slate-200">
-                            <p className="text-sm">
-                              <span className="font-medium">{antardasha.planet} Antardasha</span>
-                              <span className="text-xs text-slate-500 ml-2">
-                                {formatDate(antardasha.from)} - {formatDate(antardasha.to)}
-                              </span>
-                            </p>
-                          </div>
-                        ))}
-                        {mahadasha.children.length > 3 && (
-                          <p className="text-xs text-slate-500 ml-3">
-                            + {mahadasha.children.length - 3} more sub-periods
-                          </p>
-                        )}
+                    <div className="text-sm text-muted-foreground">
+                      {new Date(chartData.dashas[0].from).toLocaleDateString()} to{" "}
+                      {new Date(chartData.dashas[0].to).toLocaleDateString()}
+                    </div>
+                    {chartData.dashas[0].duration && (
+                      <div className="text-sm">
+                        <strong>Duration:</strong> {chartData.dashas[0].duration}
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-slate-500">Detailed dasha information not available</p>
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
-      </TabsContent>
-    </Tabs>
+
+            {/* Quick Planet Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Planetary Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {chartData.planets.map((planet) => (
+                    <div key={planet.name} className="flex items-center justify-between p-2 border rounded">
+                      <span className="text-sm font-medium">{planet.name}</span>
+                      <div className="text-right">
+                        <div className="text-xs">{planet.sign}</div>
+                        <div className="text-xs text-muted-foreground">H{planet.house}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="positions">
+            <PlanetaryPositionViewer chartData={chartData} />
+          </TabsContent>
+
+          <TabsContent value="houses" className="space-y-4">
+            <div className="grid gap-4">
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((houseNum) => {
+                const house = chartData.rashiChart[houseNum]
+                if (!house) return null
+
+                return (
+                  <Card key={houseNum}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Home className="h-4 w-4" />
+                        House {houseNum} - {house.sign}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div>
+                          <strong>Planets:</strong>{" "}
+                          {house.planets.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {house.planets.map((planet) => (
+                                <Badge key={planet.name} variant="outline">
+                                  {planet.name}
+                                  {planet.isRetrograde && " (R)"}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Empty</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          <strong>Sign:</strong> {house.sign} (starts at {house.startLongitude.toFixed(2)}°)
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          </TabsContent>
+
+          {intentAnalysis && (
+            <TabsContent value="intent">
+              <IntentAnalysisViewer analysis={intentAnalysis} />
+            </TabsContent>
+          )}
+        </Tabs>
+      </CardContent>
+    </Card>
   )
 }
+
+export default AstrologySummary
