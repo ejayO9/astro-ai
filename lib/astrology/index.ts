@@ -6,7 +6,7 @@ import { generateGurujiAstrologyPrompt } from "@/lib/astrology/prompt-generator"
 import { saveBirthDetails, getBirthDetails, clearBirthDetails, updateBirthDetails } from "@/lib/astrology/storage"
 
 // Import the new enhanced calculator
-import { calculateEnhancedVedicChart, validateAstrologyApi } from "@/lib/astrology/enhanced-calculator"
+import { calculateEnhancedVedicChart } from "@/lib/astrology/enhanced-calculator"
 
 // Import API client utilities
 import {
@@ -42,7 +42,6 @@ export {
   clearBirthDetails,
   updateBirthDetails,
   // Enhanced functions
-  validateAstrologyApi,
   // API client
   AstrologyApiClient,
   createAstrologyApiClient,

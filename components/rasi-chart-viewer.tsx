@@ -66,7 +66,7 @@ export function RasiChartViewer({ birthDetails }: RasiChartViewerProps) {
       })
 
       // Use server API route to fetch chart data
-      const response = await fetch("/api/astrology/d1-chart", {
+      const response = await fetch("/api/astrology/planets", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -12,6 +12,15 @@ export async function generateEnhancedGurujiPrompt(
   chartData: AstrologyChart,
   query?: string,
 ): Promise<string> {
+  console.log("🎯 [EnhancedPromptGenerator] generateEnhancedGurujiPrompt CALLED")
+  console.log("📁 File: lib/astrology/enhanced-prompt-generator.ts")
+  console.log("🔧 Function: generateEnhancedGurujiPrompt")
+  console.log("📊 Parameters:", {
+    birthDetails: { name: birthDetails.name, date: birthDetails.date },
+    hasChartData: !!chartData,
+    query: query || "(no query)"
+  })
+
   logInfo("enhanced-prompt-generator", "Generating enhanced Guruji prompt with LLM intent analysis", {
     hasQuery: !!query,
     birthDetailsProvided: !!birthDetails,
@@ -25,29 +34,55 @@ export async function generateEnhancedGurujiPrompt(
       )
     : false
 
+  console.log("🔍 [EnhancedPromptGenerator] Remedy detection result:", isAskingForRemedies)
+
   logInfo("enhanced-prompt-generator", "Remedy request detection", {
     isAskingForRemedies,
     query: query?.substring(0, 50),
   })
 
   try {
+    console.log("🚀 [EnhancedPromptGenerator] About to call generatePlanetaryPositionReport")
+    console.log("📁 Will call: lib/astrology/planetary-analyzer.ts")
+    console.log("🔧 Will call function: generatePlanetaryPositionReport")
+
     // Generate comprehensive planetary analysis
     const planetaryReport = generatePlanetaryPositionReport(chartData)
+    
+    console.log("✅ [EnhancedPromptGenerator] Planetary report generated")
+    console.log("📊 Planetary analyses count:", planetaryReport.planetaryAnalyses.length)
+    console.log("📊 House analyses count:", planetaryReport.houseAnalyses.length)
 
     // Analyze user intent with LLM if query is provided
     let intentAnalysis = null
     if (query) {
       try {
+        console.log("🚀 [EnhancedPromptGenerator] About to call analyzeLLMIntent")
+        console.log("📁 Will call: lib/astrology/llm-intent-extractor.ts")
+        console.log("🔧 Will call function: analyzeLLMIntent")
+        console.log("🔍 Query to analyze:", query)
+
         intentAnalysis = await analyzeLLMIntent(query)
+        
+        console.log("✅ [EnhancedPromptGenerator] LLM intent analysis completed")
+        console.log("📊 Intent analysis result:", {
+          primaryIntent: intentAnalysis.intent.primaryIntent,
+          primaryHouses: intentAnalysis.houseMapping.primaryHouses,
+          confidence: intentAnalysis.confidence
+        })
+
         logDebug("enhanced-prompt-generator", "LLM intent analysis completed", {
           primaryIntent: intentAnalysis.intent.primaryIntent,
           primaryHouses: intentAnalysis.houseMapping.primaryHouses,
           confidence: intentAnalysis.confidence,
         })
       } catch (intentError) {
+        console.error("❌ [EnhancedPromptGenerator] LLM intent analysis failed:", intentError)
         logError("enhanced-prompt-generator", "LLM intent analysis failed, continuing without it", intentError)
         intentAnalysis = null
       }
+    } else {
+      console.log("ℹ️ [EnhancedPromptGenerator] No query provided, skipping intent analysis")
     }
 
     // Format birth details
@@ -226,12 +261,26 @@ As Guruji, provide a Vedic astrological interpretation based on this comprehensi
 Remember to speak in Guruji's voice - wise and compassionate, and with occasional references to ancient wisdom. Use the specific planetary analysis data provided above to give precise and personalized insights.
 `
 
+    console.log("🔧 [EnhancedPromptGenerator] Assembling final prompt...")
+    console.log("📊 Prompt components assembled:")
+    console.log("  - Birth information: ✅")
+    console.log("  - Chart details: ✅")
+    console.log("  - Planetary positions: ✅ (" + planetaryReport.planetaryAnalyses.length + " planets)")
+    console.log("  - House occupancy: ✅ (" + planetaryReport.houseAnalyses.length + " houses)")
+    console.log("  - Intent analysis: " + (intentAnalysis ? "✅" : "❌"))
+    console.log("  - Remedies instruction: ✅ (asking for remedies: " + isAskingForRemedies + ")")
+    console.log("📄 Final prompt length:", prompt.length)
+    console.log("📄 Final prompt preview (first 500 chars):", prompt.substring(0, 500) + "...")
+
     logInfo("enhanced-prompt-generator", "Enhanced prompt generated successfully", {
       promptLength: prompt.length,
       includesRemedies: isAskingForRemedies,
       hasLLMIntentAnalysis: !!intentAnalysis,
       primaryHouses: intentAnalysis?.houseMapping.primaryHouses || [],
     })
+
+    console.log("✅ [EnhancedPromptGenerator] Prompt generation completed successfully")
+    console.log("📤 [EnhancedPromptGenerator] Returning prompt to caller")
 
     return prompt
   } catch (error) {

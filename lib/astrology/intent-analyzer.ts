@@ -29,6 +29,7 @@ export interface IntentAnalysisResult {
   summary: string
   isAskingForRemedies: boolean
   specificConcerns: string[]
+  timeline: string
 }
 
 /**
@@ -41,8 +42,8 @@ export async function analyzeUserIntent(userQuery: string): Promise<IntentAnalys
   })
 
   try {
-    // Use LLM to analyze intent and map to houses
-    const llmAnalysis = await analyzeLLMIntent(userQuery)
+    // Use LLM to analyze intent and map to houses with enhanced timeline extraction
+    const llmAnalysis = await analyzeLLMIntent(userQuery, true)
 
     // Get detailed house characteristics
     const primaryHouseChars = getHouseCharacteristics(llmAnalysis.houseMapping.primaryHouses)
@@ -98,6 +99,7 @@ export async function analyzeUserIntent(userQuery: string): Promise<IntentAnalys
       summary,
       isAskingForRemedies: llmAnalysis.intent.isAskingForRemedies,
       specificConcerns: llmAnalysis.intent.specificConcerns,
+      timeline: llmAnalysis.intent.timeline,
     }
 
     logInfo("intent-analyzer", "LLM-based intent analysis completed", {
@@ -143,6 +145,7 @@ export async function analyzeUserIntent(userQuery: string): Promise<IntentAnalys
           userQuery,
         ),
       specificConcerns: [],
+      timeline: "",
     }
   }
 }

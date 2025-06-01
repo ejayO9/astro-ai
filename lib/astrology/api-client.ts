@@ -1,3 +1,6 @@
+console.log('USER_ID:', process.env.ASTROLOGY_API_USER_ID);
+console.log('API_KEY:', process.env.ASTROLOGY_API_KEY);
+
 import { logInfo, logError, logWarn } from "@/lib/logging-service"
 
 // Types for the new planets API response
@@ -20,17 +23,6 @@ export interface PlanetData {
 
 export type PlanetsResponse = PlanetData[]
 
-// Legacy types for backward compatibility
-export interface AstrologyApiHouseData {
-  sign: number
-  sign_name: string
-  planet: string[]
-  planet_small: string[]
-  planet_degree: string[]
-}
-
-export type D1ChartResponse = AstrologyApiHouseData[]
-
 export interface BirthDetailsApiFormat {
   day: number
   month: number
@@ -44,7 +36,6 @@ export interface BirthDetailsApiFormat {
 
 export interface AstrologyApiClient {
   fetchPlanets: (data: BirthDetailsApiFormat) => Promise<PlanetsResponse>
-  fetchD1Chart: (data: BirthDetailsApiFormat) => Promise<D1ChartResponse>
   validateCredentials: () => Promise<boolean>
 }
 
@@ -64,7 +55,7 @@ export function convertBirthDetailsToApiFormat(birthDetails: any): BirthDetailsA
     }
   }
 
-  return {
+  const apiFormat = {
     day,
     month,
     year,
@@ -74,6 +65,8 @@ export function convertBirthDetailsToApiFormat(birthDetails: any): BirthDetailsA
     lon: birthDetails.longitude,
     tzone: timezoneOffset,
   }
+  console.log('convertBirthDetailsToApiFormat:', apiFormat)
+  return apiFormat
 }
 
 export function createAstrologyApiClient(): AstrologyApiClient | null {
@@ -124,44 +117,6 @@ export function createAstrologyApiClient(): AstrologyApiClient | null {
         return planetsData
       } catch (error) {
         logError("api-client", "Error fetching planets data", error)
-        throw error
-      }
-    },
-
-    async fetchD1Chart(data: BirthDetailsApiFormat): Promise<D1ChartResponse> {
-      logInfo("api-client", "Fetching D1 chart data from API (legacy)", {
-        endpoint: "/horo_chart/D1",
-        birthData: data,
-      })
-
-      try {
-        const response = await fetch(`${baseUrl}/horo_chart/D1`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Basic ${auth}`,
-          },
-          body: JSON.stringify(data),
-        })
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          logError("api-client", "Legacy API request failed", {
-            status: response.status,
-            statusText: response.statusText,
-            error: errorText,
-          })
-          throw new Error(`Legacy API request failed: ${response.status} ${response.statusText}`)
-        }
-
-        const chartData = await response.json()
-        logInfo("api-client", "D1 chart data fetched successfully (legacy)", {
-          signCount: chartData.length,
-        })
-
-        return chartData
-      } catch (error) {
-        logError("api-client", "Error fetching D1 chart data (legacy)", error)
         throw error
       }
     },

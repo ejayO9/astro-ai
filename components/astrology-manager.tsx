@@ -7,7 +7,7 @@ import { Pencil, Trash2 } from "lucide-react"
 import BirthDetailsForm from "./birth-details-form"
 import AstrologySummary from "./astrology-summary"
 import type { BirthDetails, AstrologyChart } from "@/types/astrology"
-import { generateGurujiAstrologyPrompt } from "@/lib/astrology/prompt-generator"
+import { generateGururjiAnalysisPrompt } from "@/lib/astrology/guruji-integration"
 import { getBirthDetails, clearBirthDetails, saveBirthDetails } from "@/lib/astrology/storage"
 import { calculateEnhancedVedicChart } from "@/lib/astrology/enhanced-calculator"
 
@@ -31,15 +31,17 @@ interface AstrologyManagerProps {
   onPromptGenerated: (prompt: string) => void
   characterId: string
   currentQuery?: string
+  onChartData?: (chart: AstrologyChart | null) => void
 }
 
-export default function AstrologyManager({ onPromptGenerated, characterId, currentQuery }: AstrologyManagerProps) {
+export default function AstrologyManager({ onPromptGenerated, characterId, currentQuery, onChartData }: AstrologyManagerProps) {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [birthDetails, setBirthDetails] = useState<BirthDetails | null>(null)
   const [chartData, setChartData] = useState<AstrologyChart | null>(null)
   const [showSummary, setShowSummary] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [hasStoredData, setHasStoredData] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Use refs to track if we've already loaded data and generated prompts
   const hasLoadedRef = useRef(false)
@@ -50,6 +52,16 @@ export default function AstrologyManager({ onPromptGenerated, characterId, curre
     async (details: BirthDetails, chart: AstrologyChart, query?: string) => {
       if (characterId !== "guruji") return
 
+      console.log("🎯 [AstrologyManager] generatePrompt CALLED")
+      console.log("📁 File: components/astrology-manager.tsx")
+      console.log("🔧 Function: generatePrompt")
+      console.log("📊 Parameters:", {
+        details: { name: details.name, date: details.date, city: details.city },
+        hasChart: !!chart,
+        query: query || "(no query)",
+        characterId
+      })
+
       try {
         logInfo("AstrologyManager", "Generating interpretation prompt for Guruji", {
           name: details.name,
@@ -57,14 +69,26 @@ export default function AstrologyManager({ onPromptGenerated, characterId, curre
           hasQuery: !!query,
         })
 
-        const prompt = generateGurujiAstrologyPrompt(details, chart, query)
+        console.log("🚀 [AstrologyManager] About to call generateGururjiAnalysisPrompt")
+        console.log("📁 Will call: lib/astrology/guruji-integration.ts")
+        console.log("🔧 Will call function: generateGururjiAnalysisPrompt")
+
+        const prompt = await generateGururjiAnalysisPrompt(query || "General astrological guidance", chart, details)
+        
+        console.log("✅ [AstrologyManager] Prompt generation completed")
+        console.log("📄 Generated prompt length:", prompt.length)
+        console.log("📄 Generated prompt preview:", prompt.substring(0, 300) + "...")
+        console.log("📄 Full generated prompt:", prompt)
+
         logDebug("AstrologyManager", "Prompt generated successfully", {
           promptLength: prompt.length,
         })
 
         onPromptGenerated(prompt)
+        console.log("📤 [AstrologyManager] Prompt passed to parent component")
         logInfo("AstrologyManager", "Prompt passed to parent component")
       } catch (error) {
+        console.error("❌ [AstrologyManager] Error generating prompt:", error)
         logError("AstrologyManager", "Error generating prompt", error)
         // Generate a simplified prompt
         const fallbackPrompt = `
@@ -73,6 +97,7 @@ The person has provided their birth details: ${details.name || "The native"} bor
 ${query ? `They are asking about: ${query}` : "They are seeking general astrological guidance."}
 Provide a Vedic astrological interpretation that is insightful, respectful, and spiritually oriented.
 `
+        console.log("🔄 [AstrologyManager] Using fallback prompt:", fallbackPrompt)
         logWarn("AstrologyManager", "Using fallback prompt", { fallbackPrompt })
         onPromptGenerated(fallbackPrompt)
       }
@@ -106,14 +131,21 @@ Provide a Vedic astrological interpretation that is insightful, respectful, and 
 
           try {
             // Calculate chart from stored details
+            console.log('=== ASTROLOGY MANAGER (loadStoredDetails): About to call calculateEnhancedVedicChart ===')
+            console.log('Details to use:', detailsToUse)
+            
             const chart = await calculateEnhancedVedicChart(detailsToUse)
+            
+            console.log('=== ASTROLOGY MANAGER (loadStoredDetails): Chart calculation completed ===')
+            console.log('Chart ascendant:', chart.ascendant)
+            
             setChartData(chart)
 
             // Generate prompt for Guruji
             await generatePrompt(detailsToUse, chart, currentQuery)
             lastQueryRef.current = currentQuery
           } catch (chartError) {
-            console.error("Error calculating chart:", chartError)
+            console.error("=== ASTROLOGY MANAGER (loadStoredDetails): Error calculating chart ===", chartError)
             // Notify the user but don't break the application
             setChartData(null)
           }
@@ -144,6 +176,10 @@ Provide a Vedic astrological interpretation that is insightful, respectful, and 
       lastQueryRef.current = currentQuery
     }
   }, [currentQuery, generatePrompt, birthDetails, chartData, characterId])
+
+  useEffect(() => {
+    if (onChartData) onChartData(chartData);
+  }, [chartData, onChartData]);
 
   const handleOpenForm = () => {
     setIsFormOpen(true)
@@ -181,6 +217,31 @@ Provide a Vedic astrological interpretation that is insightful, respectful, and 
       onPromptGenerated("")
     }
   }
+
+  const calculateChart = useCallback(async () => {
+    if (!birthDetails) return
+
+    try {
+      console.log('=== ASTROLOGY MANAGER: Starting chart calculation ===')
+      console.log('Birth details:', birthDetails)
+      
+      setIsLoading(true)
+      setError(null)
+      
+      console.log('=== ASTROLOGY MANAGER: Calling calculateEnhancedVedicChart ===')
+      const chartData = await calculateEnhancedVedicChart(birthDetails)
+      
+      console.log('=== ASTROLOGY MANAGER: Chart data received ===')
+      console.log('Chart ascendant:', chartData.ascendant)
+      
+      setChartData(chartData)
+    } catch (err) {
+      console.error('=== ASTROLOGY MANAGER: Chart calculation failed ===', err)
+      setError(err instanceof Error ? err.message : "Failed to calculate astrology chart")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [birthDetails])
 
   if (isLoading) {
     return (
@@ -238,8 +299,8 @@ Provide a Vedic astrological interpretation that is insightful, respectful, and 
             </div>
             <div className="p-3 bg-slate-50 rounded-md text-sm">
               <p>
-                <span className="font-medium">Birth:</span> {new Date(chartData.native.birthDate).toLocaleDateString()}{" "}
-                at {new Date(chartData.native.birthDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                <span className="font-medium">Birth:</span> {chartData.native.birthDate.toLocaleDateString()}{" "}
+                at {chartData.native.birthDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </p>
               <p>
                 <span className="font-medium">Location:</span> {birthDetails.city}, {birthDetails.country}
@@ -271,12 +332,12 @@ Provide a Vedic astrological interpretation that is insightful, respectful, and 
 
       {/* Astrology Summary Dialog */}
       <Dialog open={showSummary} onOpenChange={setShowSummary}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg" style={{ maxHeight: '90vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <DialogHeader>
             <DialogTitle>Your Astrological Chart</DialogTitle>
             <DialogDescription>Detailed information about your birth chart.</DialogDescription>
           </DialogHeader>
-          {chartData && <AstrologySummary chartData={chartData} />}
+          {chartData && birthDetails && <AstrologySummary chartData={chartData} birthDetails={birthDetails} />}
           <div className="flex justify-end">
             <Button variant="outline" onClick={handleCloseSummary}>
               Close

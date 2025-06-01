@@ -229,9 +229,13 @@ export async function POST(req: Request) {
 
       // Check if there's a custom system prompt in the messages
       const customSystemPrompt = messages.find((m) => m.role === "system")?.content
-      if (customSystemPrompt) {
+      if (customSystemPrompt && typeof customSystemPrompt === 'string') {
         logInfo("api/chat", "Custom system prompt found in messages", {
           promptLength: customSystemPrompt.length,
+          isAstrologicalPrompt: customSystemPrompt.includes("PLANETARY POSITIONS") || 
+                                customSystemPrompt.includes("BIRTH INFORMATION") ||
+                                customSystemPrompt.includes("LLM INTENT ANALYSIS"),
+          characterId: characterId,
         })
 
         // Update the system message in our store
@@ -243,7 +247,28 @@ export async function POST(req: Request) {
             content: customSystemPrompt,
           }
           usedSystemPrompt = customSystemPrompt
+          
+          // Log specifically for Guruji astrological prompts
+          if (characterId === "guruji" && customSystemPrompt.includes("PLANETARY POSITIONS")) {
+            logInfo("api/chat", "🔮 ENHANCED ASTROLOGICAL PROMPT ACTIVATED", {
+              promptLength: customSystemPrompt.length,
+              contains: {
+                birthInfo: customSystemPrompt.includes("BIRTH INFORMATION"),
+                planetaryPositions: customSystemPrompt.includes("PLANETARY POSITIONS"),
+                houseAnalysis: customSystemPrompt.includes("HOUSE OCCUPANCY"),
+                intentAnalysis: customSystemPrompt.includes("LLM INTENT ANALYSIS"),
+                dashaAnalysis: customSystemPrompt.includes("CURRENT DASHA"),
+                yogaAnalysis: customSystemPrompt.includes("RELEVANT YOGAS"),
+              }
+            })
+          }
         }
+      } else if (customSystemPrompt) {
+        // Log if we found a system prompt but it's not a string
+        logWarn("api/chat", "Custom system prompt found but it's not a string", {
+          type: typeof customSystemPrompt,
+          value: customSystemPrompt,
+        })
       }
 
       // Add language instruction to the system message
@@ -271,8 +296,8 @@ export async function POST(req: Request) {
 
         // Try different models in order of preference
         const models = [
-          { name: "gpt-4o", maxTokens: 600, temperature: 0.7 },
-          { name: "gpt-3.5-turbo", maxTokens: 800, temperature: 0.7 },
+          { name: "gpt-4", maxTokens: 1500, temperature: 0.7 },
+          { name: "gpt-3.5-turbo", maxTokens: 1200, temperature: 0.7 },
         ]
 
         let fullResponse: string | null = null
@@ -286,6 +311,18 @@ export async function POST(req: Request) {
           logInfo("api/chat", `Trying model: ${model.name}`)
 
           try {
+            // Log the system prompt being sent to the AI for debugging
+            const systemPromptToSend = optimizedMessages.find(m => m.role === "system")?.content
+            if (systemPromptToSend && typeof systemPromptToSend === 'string' && characterId === "guruji") {
+              logInfo("api/chat", "🚀 SENDING TO AI MODEL", {
+                model: model.name,
+                systemPromptLength: systemPromptToSend.length,
+                isEnhancedAstrological: systemPromptToSend.includes("PLANETARY POSITIONS"),
+                messageCount: optimizedMessages.length,
+                maxTokens: model.maxTokens
+              })
+            }
+
             // Use generateText instead of streamText since we're having issues with streaming
             const result = await generateText({
               model: openai(model.name),
@@ -300,6 +337,8 @@ export async function POST(req: Request) {
             const apiTime = Date.now() - startTime
             logInfo("api/chat", `Response generated successfully with ${model.name} in ${apiTime}ms`, {
               responseLength: fullResponse.length,
+              tokensUsed: result.usage?.totalTokens || "unknown",
+              systemPromptUsed: (systemPromptToSend && typeof systemPromptToSend === 'string' && systemPromptToSend.includes("PLANETARY POSITIONS")) ? "Enhanced Astrological" : "Standard"
             })
           } catch (error) {
             const err = error as Error
@@ -432,7 +471,7 @@ function aggressivelyOptimizeMessages(messages: Message[]): Message[] {
     return [...messages]
   }
 
-  // Always keep the system message
+  // Always keep the system message (this is crucial for astrological prompts)
   const systemMessage = messages.find((m) => m.role === "system")
 
   // Get the most recent user message
@@ -444,18 +483,21 @@ function aggressivelyOptimizeMessages(messages: Message[]): Message[] {
   // Create the optimized message array
   const optimizedMessages: Message[] = []
 
-  // Add the system message first if it exists
+  // Add the system message first if it exists (CRITICAL for astrological analysis)
   if (systemMessage) {
     optimizedMessages.push(systemMessage)
   }
 
-  // Add a summary message for context
-  optimizedMessages.push({
-    id: "summary-" + Date.now(),
-    role: "system",
-    content:
-      "The above was the system instruction. There were previous messages in this conversation that have been summarized to save tokens. Please respond to the user's most recent message below.",
-  })
+  // For astrological prompts, we need more context - only add summary if we have many messages
+  if (messages.length > 5) {
+    // Add a summary message for context only if we have many messages
+    optimizedMessages.push({
+      id: "summary-" + Date.now(),
+      role: "system",
+      content:
+        "Note: Previous conversation messages have been summarized to conserve tokens while maintaining the detailed astrological analysis above. Please provide a comprehensive response based on the astrological context provided.",
+    })
+  }
 
   // Add the previous assistant message if it exists
   if (previousAssistantMessage.length > 0) {

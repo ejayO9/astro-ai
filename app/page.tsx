@@ -14,6 +14,7 @@ import { characters } from "@/data/characters"
 import AstrologyManager from "@/components/astrology-manager"
 import type { LogEntry } from "@/lib/logging-service"
 import { logInfo, logDebug, logWarn } from "@/lib/logging-service"
+import type { AstrologyChart } from "@/types/astrology"
 
 export default function ChatPage() {
   const [showWelcome, setShowWelcome] = useState(true)
@@ -23,6 +24,7 @@ export default function ChatPage() {
   const [lastTopicSegments, setLastTopicSegments] = useState<any[]>([])
   const [customSystemPrompt, setCustomSystemPrompt] = useState<string | null>(null)
   const [responseLogs, setResponseLogs] = useState<LogEntry[]>([])
+  const [chartData, setChartData] = useState<AstrologyChart | null>(null)
 
   const {
     messages,
@@ -42,7 +44,7 @@ export default function ChatPage() {
         role: "system",
         content: characters[0].systemPrompt,
         characterId: characters[0].id,
-      },
+      } as MessageWithSystemPrompt,
     ],
     initialCharacter: characters[0],
     onResponse: (data) => {
@@ -126,33 +128,94 @@ export default function ChatPage() {
           <div className="space-y-6 pb-20">
             {/* Astrology Manager - only show for Guruji */}
             {selectedCharacter.id === "guruji" && (
-              <AstrologyManager
-                onPromptGenerated={handleAstrologyPromptGenerated}
-                characterId={selectedCharacter.id}
-                currentQuery={input || lastUserMessage || undefined}
-              />
+              <>
+                <AstrologyManager
+                  onPromptGenerated={handleAstrologyPromptGenerated}
+                  characterId={selectedCharacter.id}
+                  currentQuery={input || lastUserMessage || undefined}
+                  onChartData={setChartData}
+                />
+                
+                {/* Enhanced Astrological System Status Indicator */}
+                {customSystemPrompt && (
+                  customSystemPrompt.includes("PLANETARY POSITIONS") || 
+                  customSystemPrompt.includes("BIRTH INFORMATION") ||
+                  customSystemPrompt.includes("LLM INTENT ANALYSIS")
+                ) && (
+                  <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-sm font-medium text-purple-800">
+                        🔮 Enhanced Astrological Analysis Active
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-purple-600">
+                      Comprehensive birth chart analysis with {customSystemPrompt.length} character detailed prompt
+                      {customSystemPrompt.includes("LLM INTENT ANALYSIS") && " • Advanced intent mapping"}
+                      {customSystemPrompt.includes("PLANETARY POSITIONS") && " • Planetary analysis"}
+                      {customSystemPrompt.includes("CURRENT DASHA") && " • Dasha periods"}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {messages
               .filter((m) => m.role !== "system")
               .map((message) => {
+                // Ensure message has an id
+                if (!message.id) {
+                  console.warn("[ChatPage] Message missing id:", message)
+                  return null
+                }
+
                 // Find the character for this message
-                const messageCharacterId = (message as MessageWithSystemPrompt).characterId || selectedCharacter.id
+                const messageWithProps = message as MessageWithSystemPrompt
+                const messageCharacterId = messageWithProps.characterId || selectedCharacter.id
                 const messageCharacter = characters.find((c) => c.id === messageCharacterId) || selectedCharacter
+
+                // Ensure we have valid data before rendering
+                if (!messageCharacter) {
+                  console.warn("[ChatPage] No character found for message:", message.id)
+                  return null
+                }
+
+                // Debug: Log message structure to identify objects
+                console.log("[ChatPage] Rendering message:", {
+                  id: message.id,
+                  role: message.role,
+                  hasLogs: !!(messageWithProps.logs || currentLogs),
+                  messageKeys: Object.keys(message),
+                  chartDataType: typeof chartData,
+                  chartDataKeys: chartData ? Object.keys(chartData) : null,
+                  systemPromptType: typeof messageWithProps.systemPrompt,
+                  systemPromptValue: messageWithProps.systemPrompt
+                })
+
+                const safeLogs = messageWithProps.logs || (message.role === "assistant" ? currentLogs : [])
+                
+                // Ensure systemPrompt is always a string
+                const safeSystemPrompt = typeof messageWithProps.systemPrompt === 'string' 
+                  ? messageWithProps.systemPrompt 
+                  : typeof messageWithProps.systemPrompt === 'object'
+                    ? JSON.stringify(messageWithProps.systemPrompt)
+                    : String(messageWithProps.systemPrompt || '')
 
                 return (
                   <ChatMessage
                     key={message.id}
                     message={{
                       ...message,
-                      logs:
-                        (message as MessageWithSystemPrompt).logs || (message.role === "assistant" ? currentLogs : []),
+                      logs: safeLogs,
                     }}
-                    systemPrompt={(message as MessageWithSystemPrompt).systemPrompt}
+                    systemPrompt={safeSystemPrompt}
                     characterAvatar={message.role === "assistant" ? messageCharacter.avatarUrl : undefined}
+                    chartData={chartData || undefined}
                   />
                 )
-              })}
+              })
+              .filter(Boolean) // Remove any null entries
+            }
 
             <div ref={messagesEndRef} />
           </div>
@@ -199,6 +262,20 @@ export default function ChatPage() {
           lastTopicSegments,
           selectedCharacter: selectedCharacter.name,
           hasCustomPrompt: !!customSystemPrompt,
+          customSystemPrompt: customSystemPrompt,
+          customPromptLength: customSystemPrompt?.length || 0,
+          isAstrologicalPrompt: customSystemPrompt?.includes("PLANETARY POSITIONS") || 
+                                customSystemPrompt?.includes("BIRTH INFORMATION") ||
+                                customSystemPrompt?.includes("LLM INTENT ANALYSIS") || false,
+          astrologicalPromptComponents: customSystemPrompt ? {
+            hasBirthInfo: customSystemPrompt.includes("BIRTH INFORMATION"),
+            hasPlanetaryPositions: customSystemPrompt.includes("PLANETARY POSITIONS"), 
+            hasHouseAnalysis: customSystemPrompt.includes("HOUSE OCCUPANCY"),
+            hasIntentAnalysis: customSystemPrompt.includes("LLM INTENT ANALYSIS"),
+            hasDashaAnalysis: customSystemPrompt.includes("CURRENT DASHA"),
+            hasYogaAnalysis: customSystemPrompt.includes("RELEVANT YOGAS"),
+          } : null,
+          chartDataAvailable: !!chartData,
           logCount: currentLogs.length,
         }}
       />

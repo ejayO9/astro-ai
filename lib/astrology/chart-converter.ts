@@ -1,7 +1,8 @@
 import type { D1ChartResponse, AstrologyApiHouseData, PlanetsResponse } from "./api-client"
-import type { AstrologyChart, PlanetPosition, HouseData, AscendantData, BirthDetails } from "@/types/astrology"
+import type { AstrologyChart, PlanetPosition, HouseData, AscendantData, BirthDetails, DashaPeriod } from "@/types/astrology"
 import { longitudeToNakshatra } from "./calculator"
-import { logInfo, logDebug, logError } from "@/lib/logging-service"
+import { calculatePreciseVimshottariDasha } from "./dasha-calculator"
+import { logInfo, logDebug, logError, logWarn } from "@/lib/logging-service"
 
 // Mapping from API sign numbers to sign names
 const SIGN_ID_MAP: Record<number, string> = {
@@ -285,6 +286,7 @@ function convertPlanetsResponseToInternalFormat(planetsData: PlanetsResponse): {
 
   logDebug("chart-converter", "Converting planets API response", {
     planetCount: planetsData.length,
+    rawData: JSON.stringify(planetsData, null, 2)
   })
 
   // Initialize all 12 houses
@@ -356,19 +358,16 @@ function convertPlanetsResponseToInternalFormat(planetsData: PlanetsResponse): {
     })
   }
 
-  // Calculate house signs based on ascendant
-  const ascendantHouse = planetsData.find((p) => p.name === "Ascendant")
-  if (ascendantHouse) {
-    const ascendantSignIndex = getSignIndex(ascendantHouse.sign)
-
-    for (let houseNum = 1; houseNum <= 12; houseNum++) {
-      const signIndex = (ascendantSignIndex + houseNum - 2) % 12
-      const signName = getSignName(signIndex + 1)
-
-      if (houses[houseNum]) {
-        houses[houseNum].sign = signName
-        houses[houseNum].startLongitude = signIndex * 30
-      }
+  // Set house signs based on proper zodiac sequence starting from ascendant
+  const ascendantSignIndex = getSignIndex(ascendant.sign);
+  for (let houseNum = 1; houseNum <= 12; houseNum++) {
+    const house = houses[houseNum];
+    if (house) {
+      // Calculate the sign for this house based on zodiac order from ascendant
+      const signIndex = (ascendantSignIndex + houseNum - 1) % 12;
+      const signName = getSignName(signIndex + 1);
+      house.sign = signName;
+      house.startLongitude = signIndex * 30;
     }
   }
 
@@ -377,6 +376,7 @@ function convertPlanetsResponseToInternalFormat(planetsData: PlanetsResponse): {
     houseCount: Object.keys(houses).length,
     ascendantSign: ascendant.sign,
     planetsPerHouse: Object.fromEntries(Object.entries(houses).map(([house, data]) => [house, data.planets.length])),
+    rawPlanets: JSON.stringify(planets, null, 2)
   })
 
   return { planets, houses, ascendant }
@@ -487,6 +487,7 @@ export function convertD1ChartToAstrologyChart(
   d1Response: D1ChartResponse | undefined | null,
   birthDetails: BirthDetails,
 ): Partial<AstrologyChart> {
+  console.log('!!! CHART CONVERTER HIT (D1) !!!', { d1Response, birthDetails });
   logInfo("chart-converter", "Converting D1 chart response", {
     hasResponse: !!d1Response,
     responseType: Array.isArray(d1Response) ? "array" : typeof d1Response,
@@ -556,10 +557,12 @@ export function convertPlanetsToAstrologyChart(
   planetsResponse: PlanetsResponse | undefined | null,
   birthDetails: BirthDetails,
 ): Partial<AstrologyChart> {
+  console.log('!!! CHART CONVERTER HIT (PLANETS) !!!', { planetsResponse, birthDetails });
   logInfo("chart-converter", "Converting planets response", {
     hasResponse: !!planetsResponse,
     responseType: Array.isArray(planetsResponse) ? "array" : typeof planetsResponse,
     planetCount: Array.isArray(planetsResponse) ? planetsResponse.length : 0,
+    rawResponse: JSON.stringify(planetsResponse, null, 2)
   })
 
   try {
@@ -609,6 +612,69 @@ export function convertPlanetsToAstrologyChart(
         },
         {} as Record<string, number>,
       ),
+      rawChart: JSON.stringify(partialChart, null, 2)
+    })
+
+    // Calculate dashas using precise method with actual Moon longitude
+    let dashas: DashaPeriod[] = []
+    const moon = planets.find(p => p.name === "Moon")
+    if (moon && birthDetails && planetsResponse) {
+      try {
+        const birthDateForDasha = new Date(`${birthDetails.date}T${birthDetails.time}:00`)
+        
+        // Use the exact Moon longitude from the API for precise calculation
+        const moonData = planetsResponse.find(p => p.name === "Moon")
+        if (moonData && typeof moonData.fullDegree === 'number') {
+          logInfo("chart-converter", "Using precise dasha calculation", {
+            moonLongitude: moonData.fullDegree,
+            moonNakshatra: moonData.nakshatra,
+            moonPada: moonData.nakshatra_pad
+          })
+          
+          dashas = calculatePreciseVimshottariDasha(
+            moonData.fullDegree,
+            moonData.nakshatra,
+            moonData.nakshatra_pad,
+            birthDateForDasha
+          )
+          
+          logInfo("chart-converter", "Dasha calculation completed", {
+            dashaCount: dashas.length,
+            firstDasha: dashas.length > 0 ? `${dashas[0].planet} (${dashas[0].duration})` : "None"
+          })
+        } else {
+          // Fallback to using moon object data
+          logWarn("chart-converter", "Using fallback moon data for dasha calculation", {
+            moonLongitude: moon.longitude,
+            moonNakshatra: moon.nakshatra,
+            moonPada: moon.nakshatraPada
+          })
+          
+          dashas = calculatePreciseVimshottariDasha(
+            moon.longitude,
+            moon.nakshatra,
+            moon.nakshatraPada,
+            birthDateForDasha
+          )
+        }
+      } catch (error) {
+        logError("chart-converter", "Error calculating dashas", { error })
+        dashas = []
+      }
+    } else {
+      logWarn("chart-converter", "Missing data for dasha calculation", {
+        hasMoon: !!moon,
+        hasBirthDetails: !!birthDetails,
+        hasPlanetsResponse: !!planetsResponse
+      })
+    }
+
+    // Update the chart with dashas
+    partialChart.dashas = dashas
+    
+    logInfo("chart-converter", "Final chart with dashas", {
+      hasDashas: !!(partialChart.dashas && partialChart.dashas.length > 0),
+      dashaCount: partialChart.dashas?.length || 0
     })
 
     return partialChart

@@ -56,7 +56,7 @@ export class ChatService {
 
     // Generate response using the dynamic prompt
     const result = streamText({
-      model: openai("gpt-4o"),
+      model: openai("gpt-4.1"),
       messages: messagesWithDynamicPrompt,
     })
 

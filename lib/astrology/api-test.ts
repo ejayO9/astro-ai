@@ -28,19 +28,11 @@ export async function testAstrologyApi() {
 
     logDebug("api-test", "API data format", apiData)
 
-    logInfo("api-test", "Fetching D1 chart from API")
-    const d1Response = await apiClient.fetchD1Chart(apiData)
-
-    logInfo("api-test", "API response received", {
-      hasAscendant: !!d1Response.ascendant,
-      planetCount: d1Response.planets?.length || 0,
-      houseCount: d1Response.houses?.length || 0,
-    })
-
+    // No D1 chart test anymore
     return {
       success: true,
-      data: d1Response,
-      message: "API test successful",
+      data: apiData,
+      message: "API test successful (D1 chart test removed)",
     }
   } catch (error) {
     logError("api-test", "API test failed", error)

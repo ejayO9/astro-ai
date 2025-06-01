@@ -21,7 +21,7 @@ export type QueryCategorization = z.infer<typeof categorizationSchema>
 export async function categorizeQuery(userQuery: string): Promise<QueryCategorization> {
   try {
     const { object } = await generateObject({
-      model: openai("gpt-4o"),
+      model: openai("gpt-4.1"),
       schema: categorizationSchema,
       system: `You are a specialized categorization assistant for Vedic astrology queries. Your task is to analyze user questions and categorize them into one of the following life areas and subcategories:
 

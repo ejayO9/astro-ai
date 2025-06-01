@@ -1,8 +1,7 @@
 import type { BirthDetails, AstrologyChart } from "@/types/astrology"
-import { convertBirthDetailsToApiFormat, createAstrologyApiClient } from "./api-client"
 import { convertPlanetsToAstrologyChart } from "./chart-converter"
 import { calculateVimshottariDashaHierarchy } from "./dasha-calculator"
-import { calculateNavamsa, calculateDashamsa, calculateAyanamsa } from "./calculator"
+import { calculateNavamsa, calculateDashamsa, calculateAyanamsa, calculateVedicChart } from "./calculator"
 import { logInfo, logError, logWarn, logDebug } from "@/lib/logging-service"
 
 /**
@@ -15,52 +14,49 @@ export async function calculateEnhancedVedicChart(birthDetails: BirthDetails): P
     date: birthDetails.date,
     time: birthDetails.time,
     location: `${birthDetails.city}, ${birthDetails.country}`,
-  })
+  });
 
   try {
-    // Try to use the astrology API first
-    const apiClient = createAstrologyApiClient()
+    // Try to use the secure astrology API route first
+    logInfo("enhanced-calculator", "Attempting API calculation via secure route");
 
-    if (apiClient) {
-      logInfo("enhanced-calculator", "Astrology API client available, attempting API calculation")
+    // Use the secure API route for planets data
+    const response = await fetch('/api/astrology/planets', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(birthDetails),
+    });
 
-      try {
-        // Convert birth details to API format
-        const apiData = convertBirthDetailsToApiFormat(birthDetails)
-        logDebug("enhanced-calculator", "Birth details converted to API format", apiData)
-
-        // Fetch planets data from new API
-        const planetsResponse = await apiClient.fetchPlanets(apiData)
-        logInfo("enhanced-calculator", "Planets data fetched from API successfully", {
-          planetCount: planetsResponse.length,
-        })
-
-        // Convert API response to our format
-        const partialChart = convertPlanetsToAstrologyChart(planetsResponse, birthDetails)
-        logInfo("enhanced-calculator", "API response converted to our format")
-
-        // Calculate additional elements that the API doesn't provide
-        const enhancedChart = await enhanceChartWithCalculations(partialChart, birthDetails)
-        logInfo("enhanced-calculator", "Chart enhanced with additional calculations")
-
-        return enhancedChart
-      } catch (apiError) {
-        logError("enhanced-calculator", "API calculation failed, falling back to internal calculations", apiError)
-        // Fall through to internal calculations
-      }
-    } else {
-      logWarn("enhanced-calculator", "Astrology API not available, using internal calculations")
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `API request failed: ${response.status} ${response.statusText}`);
     }
 
-    // Fallback to internal calculations
-    logInfo("enhanced-calculator", "Using internal calculation methods")
-    const { calculateVedicChart } = await import("./calculator")
-    return await calculateVedicChart(birthDetails)
+    const planetsApiResponse = await response.json();
+    console.log('=== RAW PLANETS API RESPONSE ===', JSON.stringify(planetsApiResponse, null, 2));
+    logInfo("enhanced-calculator", "Planets data fetched from API successfully", {
+      planetCount: planetsApiResponse.length,
+    });
+
+    // Convert API response to our format
+    const partialChart = convertPlanetsToAstrologyChart(planetsApiResponse, birthDetails);
+    logInfo("enhanced-calculator", "API response converted to our format");
+
+    // Calculate additional elements that the API doesn't provide
+    const enhancedChart = await enhanceChartWithCalculations(partialChart, birthDetails);
+
+    // Attach raw API response for debugging
+    (enhancedChart as any)._rawPlanetsApiResponse = planetsApiResponse;
+
+    logInfo("enhanced-calculator", "Chart calculation completed using live API data");
+    return enhancedChart;
   } catch (error) {
-    logError("enhanced-calculator", "Error in enhanced chart calculation", error)
-    throw new Error(
-      `Failed to calculate enhanced Vedic chart: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    logError("enhanced-calculator", "API calculation failed, using internal fallback", error);
+    // FALLBACK: Use internal calculation if API fails
+    logWarn("enhanced-calculator", "Using internal fallback calculation");
+    return await calculateVedicChart(birthDetails);
   }
 }
 
@@ -97,11 +93,21 @@ async function enhanceChartWithCalculations(
     let dashas: any[] = []
     let hierarchicalDashas: any[] = []
 
-    if (moon) {
+    // Check if dashas were already calculated in the conversion step
+    if (partialChart.dashas && partialChart.dashas.length > 0) {
+      logInfo("enhanced-calculator", "Using dashas from chart converter", {
+        dashaCount: partialChart.dashas.length,
+        firstDasha: partialChart.dashas[0]?.planet
+      })
+      dashas = partialChart.dashas
+    } else if (moon) {
+      logInfo("enhanced-calculator", "Calculating dashas from moon position")
       // Import the original dasha calculation function
       const { calculateVimshottariDasha } = await import("./calculator")
       dashas = calculateVimshottariDasha(moon.nakshatra, moon.nakshatraPada, partialChart.native!.birthDate)
+    }
 
+    if (moon) {
       // Calculate hierarchical dashas with 3 levels
       hierarchicalDashas = calculateVimshottariDashaHierarchy(
         moon.nakshatra,
@@ -109,6 +115,12 @@ async function enhanceChartWithCalculations(
         partialChart.native!.birthDate,
         3,
       )
+      
+      logInfo("enhanced-calculator", "Calculated hierarchical dashas", {
+        hierarchicalDashaCount: hierarchicalDashas.length,
+        firstMahadasha: hierarchicalDashas[0]?.planet,
+        firstAntardashaCount: hierarchicalDashas[0]?.children?.length || 0
+      })
     }
 
     // Combine everything into a complete chart
@@ -124,6 +136,7 @@ async function enhanceChartWithCalculations(
       ayanamsa,
     }
 
+    console.log('=== FINAL ASTROLOGY CHART ===', JSON.stringify(completeChart, null, 2));
     logInfo("enhanced-calculator", "Chart enhancement completed successfully", {
       hasNavamsa: !!navamsaChart,
       hasDashamsa: !!dashamsa,
@@ -137,27 +150,4 @@ async function enhanceChartWithCalculations(
     logError("enhanced-calculator", "Error enhancing chart", error)
     throw new Error(`Failed to enhance chart: ${error instanceof Error ? error.message : String(error)}`)
   }
-}
-
-/**
- * Validates that the astrology API is working
- */
-export async function validateAstrologyApi(): Promise<boolean> {
-  logInfo("enhanced-calculator", "Validating astrology API")
-
-  const apiClient = createAstrologyApiClient()
-
-  if (!apiClient) {
-    logWarn("enhanced-calculator", "No API credentials available")
-    return false
-  }
-
-  try {
-    const isValid = await apiClient.validateCredentials()
-    logInfo("enhanced-calculator", "API validation result", { isValid })
-    return isValid
-  } catch (error) {
-    logError("enhanced-calculator", "API validation failed", error)
-    return false
-  }
-}
+} 
