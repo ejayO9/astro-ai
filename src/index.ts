@@ -2,6 +2,7 @@ import * as fs from "fs";
 import express from 'express';
 import dotenv from 'dotenv';
 import chatRoutes from "./routes/chatRoutes";
+import astrologyRoutes from "./routes/astrologyRoutes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { requestLogger } from "./middleware/requestLogger";
 
@@ -20,7 +21,8 @@ app.get('/', (req, res) => {
 });
 
 // API routes
-app.use("/api", chatRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/astrology", astrologyRoutes);
 
 // Error handling middleware (must be last)
 app.use(notFoundHandler);

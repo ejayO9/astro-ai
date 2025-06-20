@@ -4,7 +4,7 @@ import { AIService } from "./aiService";
 import { limitEmojis } from "../../lib/text-splitter";
 import { isGreetingOrNonQuestion } from "../../lib/message-analyzer";
 import { analyzeTopics, type TopicSegment } from "../../lib/topic-analyzer";
-import { getCharacterById, getDefaultCharacter } from "../../data/characters";
+import { getCharacterById, getDefaultCharacter } from "../data/characters";
 import { detectLanguageAndScript } from "../../lib/language-detector";
 
 export interface ChatRequest {
@@ -38,6 +38,7 @@ export class ChatService {
     const messageStore = MessageStoreService.getMessageStore(characterId);
     
     // Handle chat reset if requested
+    //TODO : undertand how the chat is reset
     if (resetChat) {
       console.log(`[ChatService] Resetting chat`);
       MessageStoreService.resetMessageStore(characterId);

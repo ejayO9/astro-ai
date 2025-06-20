@@ -36,8 +36,18 @@ export class AIService {
       console.log(`[AI] Trying model: ${model.name}`);
 
       try {
+        /*
+        TODO: Check if all the logs made in the try block are detailed enough.
+        */ 
+
+        
         // Log system prompt info for debugging
         const systemPrompt = messages.find(m => m.role === "system")?.content;
+
+        /*
+        TODO: in /api/chat the below if condition is different (line 316) . it includes the characterId as well. Check why its there and what is its significance.
+        if (systemPrompt && typeof systemPrompt === 'string' && characterId === "guruji") {
+        */
         if (systemPrompt && typeof systemPrompt === 'string') {
           console.log(`[AI] System prompt length: ${systemPrompt.length}`);
           if (systemPrompt.includes("PLANETARY POSITIONS")) {
@@ -45,6 +55,9 @@ export class AIService {
           }
         }
 
+        /*
+        TODO: check why streamText is not used here and generateText is used instead. The comment in /api/chat (line 326) says that there are issues with streaming.
+        */
         const result = await generateText({
           model: openai(model.name),
           messages,
